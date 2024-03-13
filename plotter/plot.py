@@ -298,13 +298,26 @@ class Orig_Plotter(object):
         sns.set_context("notebook", font_scale=size*0.15)
         fig, ax = plt.subplots(figsize=(size,size))
         
+        if point_num is not None:
+            df_data['mol_num'] = point_num        
+            
         # Create a plot based on the reduced components 
         if kind == "scatter":
-            plot = sns.scatterplot(x=x, y=y, hue=hue, hue_order=hue_order, palette=palette, data=df_data, s=size*3)
-
+            print(df_data.head())
+            print(x)
+            print(y)
+            print(hue)
+            if point_num is not None:
+                plot = sns.scatterplot(x=x, y=y, hue=hue, hue_order=hue_order, palette=palette, data=df_data, size='mol_num', legend='brief')
+                plot.legend(markerscale=size*0.08)
+                sns.move_legend(plot, "upper left", bbox_to_anchor=(1, 1)) 
+            else:
+                plot = sns.scatterplot(x=x, y=y, hue=hue, hue_order=hue_order, palette=palette, data=df_data, s=3*size, legend='brief')
+                plot.legend(markerscale=size*0.08)
+                sns.move_legend(plot, "upper left", bbox_to_anchor=(1, 1)) 
             plot.set_label("scatter")
             axis = plot
-            plot.legend(markerscale=size*0.19)
+            
             # Add colorbar
             if self.__target_type == "R" and colorbar:
                 plot.get_legend().remove()
