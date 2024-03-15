@@ -151,6 +151,23 @@ class Orig_Plotter(object):
         """
         return cls(smiles_list, target, target_type, sim_type, desc.get_mordred_descriptors, desc.get_ecfp)         
     
+    def get_descriptors(self):
+        """
+        Returns the dataframe containing the descriptors of the molecules.
+        
+        :returns: The dataframe containing the descriptors.
+        :rtype: Dataframe
+        """
+        return self.__df_descriptors.copy()
+    
+    def get_mols(self):
+        """
+        Returns the list of molecules.
+        
+        :returns: The list of molecules.
+        :rtype: list
+        """
+        return self.__mols.copy()
     
     def tsne(self, perplexity=None, pca=False, random_state=None, **kwargs):
         """
@@ -200,9 +217,12 @@ class Orig_Plotter(object):
             
         if len(self.__target) > 0: 
             self.__df_2_components['target'] = self.__target
+            
+        tsne_smiles_df = self.__df_2_components.copy()
+        tsne_smiles_df.index = self.__df_descriptors.index
         
         
-        return self.__df_2_components.copy()
+        return tsne_smiles_df # self.__df_2_components.copy(), tsne_smiles_df
     
     def visualize_plot(self, size=20, kind="scatter", remove_outliers=False, is_colored=True, colorbar=False, 
                        clusters=False, filename=None, title=None, point_num=None):

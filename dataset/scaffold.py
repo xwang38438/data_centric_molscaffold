@@ -20,6 +20,8 @@ class ogbg_with_smiles(InMemoryDataset):
         if smile_list is not None:
             for i in range(len(data_list)):
                 data_list[i].smiles = smile_list[i]
+                scaff_smiles = _generate_scaffold(smile_list[i])
+                data_list[i].scaff_smiles = scaff_smiles
   
         
         self.data, self.slices = self.collate(data_list)

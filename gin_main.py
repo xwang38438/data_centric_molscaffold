@@ -3,7 +3,9 @@ from torch_geometric.loader import DataLoader
 import torch.optim as optim
 import torch.nn.functional as F
 from gin_vanilla.gnn import GNN
-
+import os 
+from dataset.scaffold import ogbg_with_smiles
+import pandas as pd
 from tqdm import tqdm
 import argparse
 import time
@@ -14,6 +16,14 @@ from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
 
 cls_criterion = torch.nn.BCEWithLogitsLoss()
 reg_criterion = torch.nn.MSELoss()
+
+test_cls_criterion = torch.nn.BCEWithLogitsLoss(reduction='none')
+test_reg_criterion = torch.nn.MSELoss(reduction='none')
+### to do 
+# load dataframe for the tsne visualization
+
+
+
 
 def train(model, device, loader, optimizer, task_type):
     model.train()
@@ -35,7 +45,7 @@ def train(model, device, loader, optimizer, task_type):
             loss.backward()
             optimizer.step()
 
-def eval(model, device, loader, evaluator):
+def eval(model, device, loader, evaluator, task_type):
     model.eval()
     y_true = []
     y_pred = []
@@ -54,10 +64,16 @@ def eval(model, device, loader, evaluator):
 
     y_true = torch.cat(y_true, dim = 0).numpy()
     y_pred = torch.cat(y_pred, dim = 0).numpy()
+    
+    if 'classification' in task_type:
+        loss = test_cls_criterion(torch.tensor(y_pred).to(torch.float32), torch.tensor(y_true).to(torch.float32))
+    else:
+        loss = reg_criterion(torch.tensor(y_pred).to(torch.float32), torch.tensor(y_true).to(torch.float32))
+    
 
     input_dict = {"y_true": y_true, "y_pred": y_pred}
 
-    return evaluator.eval(input_dict)
+    return evaluator.eval(input_dict), loss
 
 
 def main():
@@ -92,23 +108,36 @@ def main():
 
     ### automatic dataloading and splitting
     dataset = PygGraphPropPredDataset(name = args.dataset, root='./raw_data')
+    dataset_list = [data for data in dataset]
+    smile_path = os.path.join('./raw_data', '_'.join(args.dataset.split('-')), 'mapping/mol.csv.gz')
+    smiles_df = pd.read_csv(smile_path, compression='gzip', usecols=['smiles'])
+    smiles_list = smiles_df['smiles'].tolist()
+
+    new_dataset = ogbg_with_smiles(name = args.dataset,
+                                       root = './raw_data',
+                                       data_list = dataset_list, 
+                                       smile_list = smiles_list)
+
+    # need to collect num_tasks, eval_metric, and task_type from the dataset
+
 
     if args.feature == 'full':
         pass 
     elif args.feature == 'simple':
         print('using simple feature')
         # only retain the top two node/edge features
-        dataset.data.x = dataset.data.x[:,:2]
-        dataset.data.edge_attr = dataset.data.edge_attr[:,:2]
+        new_dataset.data.x = new_dataset.data.x[:,:2]
+        new_dataset.data.edge_attr = new_dataset.data.edge_attr[:,:2]
 
-    split_idx = dataset.get_idx_split()
+    split_idx = new_dataset.get_idx_split(split_type="scaffold")
 
     ### automatic evaluator. takes dataset name as input
     evaluator = Evaluator(args.dataset)
 
-    train_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
-    valid_loader = DataLoader(dataset[split_idx["valid"]], batch_size=args.batch_size, shuffle=False, num_workers = args.num_workers)
-    test_loader = DataLoader(dataset[split_idx["test"]], batch_size=args.batch_size, shuffle=False, num_workers = args.num_workers)
+    # need change to the newly defined dataset
+    train_loader = DataLoader(new_dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+    valid_loader = DataLoader(new_dataset[split_idx["valid"]], batch_size=args.batch_size, shuffle=False, num_workers = args.num_workers)
+    test_loader = DataLoader(new_dataset[split_idx["test"]], batch_size=args.batch_size, shuffle=False, num_workers = args.num_workers)
 
     if args.gnn == 'gin':
         model = GNN(gnn_type = 'gin', num_tasks = dataset.num_tasks, num_layer = args.num_layer, emb_dim = args.emb_dim, drop_ratio = args.drop_ratio, virtual_node = False).to(device)
@@ -126,6 +155,7 @@ def main():
     valid_curve = []
     test_curve = []
     train_curve = []
+    test_losses = []
 
     for epoch in range(1, args.epochs + 1):
         print("=====Epoch {}".format(epoch))
@@ -133,22 +163,25 @@ def main():
         train(model, device, train_loader, optimizer, dataset.task_type)
 
         print('Evaluating...')
-        train_perf = eval(model, device, train_loader, evaluator)
-        valid_perf = eval(model, device, valid_loader, evaluator)
-        test_perf = eval(model, device, test_loader, evaluator)
+        train_perf, _ = eval(model, device, train_loader, evaluator, dataset.task_type)
+        valid_perf, _ = eval(model, device, valid_loader, evaluator, dataset.task_type)
+        test_perf, test_loss = eval(model, device, test_loader, evaluator, dataset.task_type)
 
         print({'Train': train_perf, 'Validation': valid_perf, 'Test': test_perf})
 
         train_curve.append(train_perf[dataset.eval_metric])
         valid_curve.append(valid_perf[dataset.eval_metric])
         test_curve.append(test_perf[dataset.eval_metric])
+        test_losses.append(test_loss)
 
     if 'classification' in dataset.task_type:
         best_val_epoch = np.argmax(np.array(valid_curve))
         best_train = max(train_curve)
+        best_test_loss = test_losses[best_val_epoch]
     else:
         best_val_epoch = np.argmin(np.array(valid_curve))
         best_train = min(train_curve)
+        best_test_loss = test_losses[best_val_epoch]
 
     print('Finished training!')
     print('Best validation score: {}'.format(valid_curve[best_val_epoch]))
@@ -157,6 +190,8 @@ def main():
     if not args.filename == '':
         torch.save({'Val': valid_curve[best_val_epoch], 'Test': test_curve[best_val_epoch], 'Train': train_curve[best_val_epoch], 'BestTrain': best_train}, args.filename)
 
+    # save the best test loss list
+    torch.save(best_test_loss, f'./results/{args.dataset}/test_losses.pt')
 
 if __name__ == "__main__":
     main()
