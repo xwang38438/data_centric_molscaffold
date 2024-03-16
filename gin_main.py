@@ -24,7 +24,6 @@ test_reg_criterion = torch.nn.MSELoss(reduction='none')
 
 
 
-
 def train(model, device, loader, optimizer, task_type):
     model.train()
 
@@ -64,11 +63,28 @@ def eval(model, device, loader, evaluator, task_type):
 
     y_true = torch.cat(y_true, dim = 0).numpy()
     y_pred = torch.cat(y_pred, dim = 0).numpy()
+    #print(y_true.shape, y_pred.shape)
     
     if 'classification' in task_type:
-        loss = test_cls_criterion(torch.tensor(y_pred).to(torch.float32), torch.tensor(y_true).to(torch.float32))
+            #loss = test_cls_criterion(torch.tensor(y_pred).to(torch.float32), torch.tensor(y_true).to(torch.float32))
+        # Calculate loss for each task separately
+        y_pred_tensor = torch.tensor(y_pred).to(torch.float32)
+        y_true_tensor = torch.tensor(y_true).to(torch.float32)
+        # print(y_pred_tensor.shape, y_true_tensor.shape)
+        is_labeled = y_true_tensor == y_true_tensor
+        # print(is_labeled.shape )
+        # Calculate loss for each task and each test point separately
+        loss = test_cls_criterion(y_pred_tensor, y_true_tensor)
+        # print(loss.shape)
+        
+        loss = loss.detach().cpu().numpy()
+        # check if there exists nan target
+        # print(np.isnan(loss).any())
+        loss = np.nanmean(loss, axis=1)
+
+        print(f'Check if loss has nan values: {np.isnan(loss).any()}')
     else:
-        loss = reg_criterion(torch.tensor(y_pred).to(torch.float32), torch.tensor(y_true).to(torch.float32))
+        loss = test_reg_criterion(torch.tensor(y_pred).to(torch.float32), torch.tensor(y_true).to(torch.float32))
     
 
     input_dict = {"y_true": y_true, "y_pred": y_pred}
@@ -191,6 +207,9 @@ def main():
         torch.save({'Val': valid_curve[best_val_epoch], 'Test': test_curve[best_val_epoch], 'Train': train_curve[best_val_epoch], 'BestTrain': best_train}, args.filename)
 
     # save the best test loss list
+    # if folder does not exist, create it
+    if not os.path.exists(f'./results/{args.dataset}'):
+        os.makedirs(f'./results/{args.dataset}')
     torch.save(best_test_loss, f'./results/{args.dataset}/test_losses.pt')
 
 if __name__ == "__main__":

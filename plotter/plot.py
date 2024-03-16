@@ -323,10 +323,10 @@ class Orig_Plotter(object):
             
         # Create a plot based on the reduced components 
         if kind == "scatter":
-            print(df_data.head())
-            print(x)
-            print(y)
-            print(hue)
+            # print(df_data.head())
+            # print(x)
+            # print(y)
+            # print(hue)
             if point_num is not None:
                 plot = sns.scatterplot(x=x, y=y, hue=hue, hue_order=hue_order, palette=palette, data=df_data, size='mol_num', legend='brief')
                 plot.legend(markerscale=size*0.08)
