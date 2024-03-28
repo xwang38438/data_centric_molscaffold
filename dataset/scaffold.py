@@ -6,9 +6,21 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from typing import List
 from .get_datasets import get_dataset
+from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit.Chem import DataStructs
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from rdkit.Chem import DataStructs
+import operator
+from rdkit.ML.Cluster import Butina
 
+
+
+### Define the dataset class
 class ogbg_with_smiles(InMemoryDataset):
-    def __init__(self, name, root, data_list, smile_list = None, 
+    def __init__(self, name, root, data_list, scaff_cluster = None, smile_list = None, 
+                 pca_dim = 3, n_clusters = 10, cutoff = 0.6, radius = 4, nBits = 1024,
                  transform=None, pre_transform=None):
         super(ogbg_with_smiles, self).__init__(None, transform, pre_transform)
         self.root = root
@@ -17,21 +29,35 @@ class ogbg_with_smiles(InMemoryDataset):
         self.data_list = data_list
         _ , self.scaffold_sets = generate_scaffolds_dict(smile_list)
         
+        # add smiles and scaffold smiles to data_list
         if smile_list is not None:
             for i in range(len(data_list)):
                 data_list[i].smiles = smile_list[i]
                 scaff_smiles = _generate_scaffold(smile_list[i])
                 data_list[i].scaff_smiles = scaff_smiles
-  
+
+        if scaff_cluster is not None and smile_list is not None:
+            scaff_list = [data.scaff_smiles for data in data_list]
+            
+            if scaff_cluster not in ['k-mean', 'butina']:
+                raise ValueError('Clustering method must be either k-mean or butina')
+            
+            else:
+                cluster_labels = assign_scaff_cluster(scaff_list, method=scaff_cluster, n_clusters=n_clusters, pca_dim=pca_dim,
+                                                    cutoff=cutoff, radius=radius, nBits=nBits)
+                for i in range(len(data_list)):
+                    data_list[i].scaff_cluster = cluster_labels[i]
         
         self.data, self.slices = self.collate(data_list)
-        
-        # def len(self):
-        #     return len(self.data)               
+                     
         
         self.name = '_'.join(name.split('-'))
         self.smile_list = smile_list
-        
+    
+    def get_cluster_info(self):
+        # output value counts of the cluster labels
+        return pd.Series([data.scaff_cluster for data in self.data_list]).value_counts()
+    
     def get_scaffold_sets(self):
         return self.scaffold_sets
 
@@ -203,32 +229,104 @@ def get_scaffold_split_info(args):
             break
 
 
-                # all_scaffold_sets, _ = generate_scaffolds_dict(self.smile_list)
-                
-                # print(f'splitting by scaffold with ratio {ratio}')
+def assign_scaff_cluster(scaff_list, method = 'k-mean', n_clusters = 10, pca_dim = 3,
+                         cutoff = 0.6, radius = 4, nBits = 1024):
+    scaff_mols = [Chem.MolFromSmiles(scaffold) for scaffold in scaff_list]
+    if method == 'k-mean':
+        ecfp = []
+        error = []
+        for mol in scaff_mols:
+            if mol is None:
+                print('Error: None molecule')
+                error.append(mol)
+                ecfp.append([None]*1024)
+            else:
+                mol = Chem.AddHs(mol)
+                list_bits_fingerprint = []
+                list_bits_fingerprint[:0] = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits)
+                ecfp.append(list_bits_fingerprint)
+        ecfp_df = pd.DataFrame(data = ecfp, index = scaff_list)
+        
+        # reduce the dimension to 3 using PCA
+        pca = PCA(n_components = pca_dim, random_state=0)
+        ecfp_df_pca = pca.fit_transform(ecfp_df) # numpy array        
+        
+        # apply k-mean clustering algorithm
+        kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+        kmeans.fit(ecfp_df_pca)
 
-                # train_cutoff = train_ratio * len(self.data_list)
-                # valid_cutoff = (train_ratio + valid_ratio) * len(self.data_list)
-                
-                # train_idx: List[int] = []
-                # valid_idx: List[int] = []
-                # test_idx: List[int] = []
+        # get the cluster labels for each data point
+        cluster_labels = kmeans.labels_
+        if len(cluster_labels) != len(scaff_mols):
+            raise ValueError('The number of cluster labels is not equal to the number of scaffold molecules')
+        print(f"K-mean Assigned {len(scaff_mols)} scaffold molecules to {n_clusters} clusters")
+        return cluster_labels.tolist()
+        
+    elif method == 'butina':
+        ecfp = [] 
+        for mol in scaff_mols:
+            if mol is None:
+                ecfp.append(None)
+                continue
+            try:
+                mol = Chem.AddHs(mol)
+                ecfp.append(AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits))
+            except Exception as e:
+                print(f"Error generating Morgan fingerprint: {e}")
+                ecfp.append(None)
+        # calculate distance matrix 
+        dists = []
+        n_mols  = len(scaff_mols)
+        
+        for i in range(1, n_mols):
+            dist = DataStructs.cDataStructs.BulkTanimotoSimilarity(ecfp[i], ecfp[:i], returnDistance=True)
+            dists.extend([x for x in dist])
+        
+        
+        cluster_indices = Butina.ClusterData(dists, n_mols, cutoff, isDistData=True)
+        cluster_labels = [-1] * len(ecfp)
 
-                # for scaffold_set in all_scaffold_sets:
-                #     if len(train_idx) + len(scaffold_set) > train_cutoff:
-                #         if len(train_idx) + len(valid_idx) + len(scaffold_set) > valid_cutoff:
-                #             test_idx.extend(scaffold_set)
-                #         else: 
-                #             valid_idx.extend(scaffold_set)
-                #     else:
-                #         train_idx.extend(scaffold_set)
+        # Iterate over cluster_indices to assign cluster labels
+        for cluster_label, cluster in enumerate(cluster_indices):
+            for index in cluster:
+                cluster_labels[index] = cluster_label
 
-                # assert len(set(train_idx).intersection(set(valid_idx))) == 0
-                # assert len(set(test_idx).intersection(set(valid_idx))) == 0
-                
-                # df_train = pd.DataFrame({'train': train_idx})
-                # df_valid = pd.DataFrame({'valid': valid_idx})
-                # df_test = pd.DataFrame({'test': test_idx})
-                # df_train.to_csv(osp.join(path, 'train.csv.gz'), index=False, header=False, compression="gzip")
-                # df_valid.to_csv(osp.join(path, 'valid.csv.gz'), index=False, header=False, compression="gzip")
-                # df_test.to_csv(osp.join(path, 'test.csv.gz'), index=False, header=False, compression="gzip")
+        print(f'Butina Assigned {len(scaff_mols)} scaffold molecules to {len(cluster_indices)} clusters')
+        return cluster_labels
+       
+    else:
+        raise ValueError('Clustering method must be either k-mean or butina')
+
+
+from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit import DataStructs
+import numpy as np
+
+def get_tanimoto_similarity(smile_list, radius=4, nBits=1024):
+    smile_mols = [Chem.MolFromSmiles(scaffold) for scaffold in smile_list]
+    ecfp = []
+    for mol in smile_mols:
+        if mol is None:
+            ecfp.append(None)
+            continue
+        try:
+            mol = Chem.AddHs(mol)
+            ecfp.append(AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits))
+        except Exception as e:
+            print(f"Error generating Morgan fingerprint: {e}")
+            ecfp.append(None)
+
+    sims = []
+    n_mols = len(smile_mols)
+
+    for i in range(1, n_mols):
+        # If the current ECFP or any previous ECFP is None, add NaNs instead of calculating distances
+        if ecfp[i] is None or any(x is None for x in ecfp[:i]):
+            sims.extend([np.nan] * i)  # Add NaN for each comparison that cannot be made
+        else:
+            # Calculate Tanimoto similarity for non-None fingerprints
+            sim = DataStructs.BulkTanimotoSimilarity(ecfp[i], ecfp[:i])
+            sims.extend([x for x in sim])
+            
+    return sims

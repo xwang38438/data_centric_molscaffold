@@ -111,8 +111,8 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
                 print('reset topk to: ', selected_topk)
 
 ### need to check the topk_indices
-            topk_indices = torch.topk(criterion(y_pred_logits.view(y_true_all.size()).to(torch.float32), y_true_all).view(y_true_all.size()).sum(dim=-1), selected_topk, largest=False, sorted=True).indices
             
+            topk_indices = torch.topk(criterion(y_pred_logits.view(y_true_all.size()).to(torch.float32), y_true_all).view(y_true_all.size()).sum(dim=-1), selected_topk, largest=False, sorted=True).indices
             # get molecules of the topk indices
             topk_mols = [batch_data_list[i] for i in topk_indices]
             # append to the dict with the key as the step
@@ -274,6 +274,8 @@ class NewDataset(InMemoryDataset):
         self.num_fail = num_fail
         # print('data_len', self.data_len, 'num_fail', num_fail)
         for data in self.data_list:
+            
+        ### apply graph to mol
             if 'smiles' not in data:
                 data['smiles'] = ''
         

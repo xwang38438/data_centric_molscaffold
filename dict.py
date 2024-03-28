@@ -44,7 +44,7 @@ def get_ecfp_fingerprints(smiles_list, radius=4, nBits=1024):
 
 def main():
     parser = argparse.ArgumentParser(description='Scaffold-aware pipeline to cluster molecules')
-    parser.add_argument('--dataset', type=str, default='ogbg-molbace',
+    parser.add_argument('--dataset', type=str, default='ogbg-moltox21',
                         help='dataset name (default: ogbg-molbace)')
     
     parser.add_argument('--c_method', type=str, default='k-mean',
@@ -67,91 +67,112 @@ def main():
     new_labeled_dataset = ogbg_with_smiles(name = args.dataset,
                                    root = './raw_data',
                                    data_list = labeled_dataset_list, 
-                                   smile_list = smiles)
+                                   smile_list = smiles,
+                                   scaff_cluster=args.c_method)
     
     # get molecules indices for train, valid, and test split 
     label_split_idx_scaffold = new_labeled_dataset.get_idx_split(split_type = 'scaffold')
+    print(new_labeled_dataset.scaff_cluster)
+    print(new_labeled_dataset.get_cluster_info())
     
-    # derive the scaffold smiles for all molecules
-    scaffold_list = new_labeled_dataset.scaff_smiles 
-    scaffold_mols = [Chem.MolFromSmiles(scaffold) for scaffold in scaffold_list]
-    print(len(scaffold_mols))
+    
+    
+    
+    
+    # # derive the scaffold smiles for all molecules
+    # scaffold_list = new_labeled_dataset.scaff_smiles 
+    # scaffold_mols = [Chem.MolFromSmiles(scaffold) for scaffold in scaffold_list]
+    # print(len(scaffold_mols))
 
-    if args.c_method == 'k-mean':
-        ecfp = []
-        error = []
-        for mol in scaffold_mols:
-            if mol is None:
-                error.append(mol)
-                ecfp.append([None]*1024)
-            else:
-                mol = Chem.AddHs(mol)
-                list_bits_fingerprint = []
-                list_bits_fingerprint[:0] = AllChem.GetMorganFingerprintAsBitVect(mol, 4, 1024)
-                ecfp.append(list_bits_fingerprint)
-        ecfp_df = pd.DataFrame(data = ecfp, index = scaffold_list)
+    # if args.c_method == 'k-mean':
+    #     ecfp = []
+    #     error = []
+    #     for mol in scaffold_mols:
+    #         if mol is None:
+    #             error.append(mol)
+    #             ecfp.append([None]*1024)
+    #         else:
+    #             mol = Chem.AddHs(mol)
+    #             list_bits_fingerprint = []
+    #             list_bits_fingerprint[:0] = AllChem.GetMorganFingerprint(mol, 4, 1024)
+    #             ecfp.append(list_bits_fingerprint)
+    #     ecfp_df = pd.DataFrame(data = ecfp, index = scaffold_list)
         
-        # reduce the dimension to 3 using PCA
-        pca = PCA(n_components = args.pca_dim, random_state=0)
-        ecfp_df_pca = pca.fit_transform(ecfp_df) # numpy array        
+    #     # reduce the dimension to 3 using PCA
+    #     pca = PCA(n_components = args.pca_dim, random_state=0)
+    #     ecfp_df_pca = pca.fit_transform(ecfp_df) # numpy array        
            
-        # apply k-mean clustering algorithm
-        kmeans = KMeans(n_clusters=args.num_clusters, random_state=0)
-        kmeans.fit(ecfp_df_pca)
+    #     # apply k-mean clustering algorithm
+    #     kmeans = KMeans(n_clusters=args.num_clusters, random_state=0)
+    #     kmeans.fit(ecfp_df_pca)
 
-        # get the cluster labels for each data point
-        cluster_labels = kmeans.labels_
-        if len(cluster_labels) != len(scaffold_mols):
-            raise ValueError('The number of cluster labels is not equal to the number of scaffold molecules')
+    #     # get the cluster labels for each data point
+    #     cluster_labels = kmeans.labels_
+    #     if len(cluster_labels) != len(scaffold_mols):
+    #         raise ValueError('The number of cluster labels is not equal to the number of scaffold molecules')
         
-        # assign the cluster labels to dataset
-        new_labeled_dataset.scaff_labels = cluster_labels
-        print(pd.Series(cluster_labels).value_counts())
+    #     # assign the cluster labels to dataset
+    #     new_labeled_dataset.scaff_labels = cluster_labels
+    #     print(pd.Series(cluster_labels).value_counts())
         
-        # print the cluster labels
-        print(new_labeled_dataset.scaff_labels)
-        print(len(cluster_labels))
+    #     # print the cluster labels
+    #     print(new_labeled_dataset.scaff_labels)
+    #     print(len(cluster_labels))
         
-    elif args.c_method == 'butina':
-        fps = [] # list of rdkit.DataStructs.cDataStructs.ExplicitBitVect objects
-        for mol in scaffold_mols:
-            mol = Chem.AddHs(mol)
-            fps.append(AllChem.GetMorganFingerprintAsBitVect(mol, 4, 1024))
-        # calculate distance matrix 
-        dists = []
-        n_mols  = len(scaffold_mols)
-        
-        for i in range(1, n_mols):
-            dist = DataStructs.cDataStructs.BulkTanimotoSimilarity(fps[i], fps[:i], returnDistance=True)
-            dists.extend([x for x in dist])
-        
-        print(len(dists))
-        
-        cutoff = 0.65
-        
-        cluster_indices = Butina.ClusterData(dists, n_mols, cutoff, isDistData=True)
-        cluster_mols = [operator.itemgetter(*cluster)(scaffold_mols) for cluster in cluster_indices]
-        
-        print(len(cluster_mols))
-        print(len(cluster_mols[0]))
-        
-    # elif args.c_method == 'k-medoids':
+    # elif args.c_method == 'butina':
     #     fps = [] # list of rdkit.DataStructs.cDataStructs.ExplicitBitVect objects
     #     for mol in scaffold_mols:
     #         mol = Chem.AddHs(mol)
     #         fps.append(AllChem.GetMorganFingerprintAsBitVect(mol, 4, 1024))
+        
+    #     # calculate distance matrix 
+        
+        
+    #     dists = []
+    #     n_mols  = len(scaffold_mols)
+        
+    #     for i in range(1, n_mols):
+    #         dist = DataStructs.cDataStructs.BulkTanimotoSimilarity(fps[i], fps[:i], returnDistance=True)
+    #         dists.extend([x for x in dist])
+        
+        
+    #     cutoff = 0.65
+        
+    #     cluster_indices = Butina.ClusterData(dists, n_mols, cutoff, isDistData=True)
+
+    #     labels = [-1] * len(fps)
+
+    #     # Iterate over cluster_indices to assign cluster labels
+    #     for cluster_label, cluster in enumerate(cluster_indices):
+    #         for index in cluster:
+    #             labels[index] = cluster_label
+
+    #     # Now, labels list contains the cluster label for each molecule in the order they appear in fps
+    #     print(labels)
+
+    #     cluster_mols = [operator.itemgetter(*cluster)(scaffold_mols) for cluster in cluster_indices]
+        
+    #     print(len(cluster_mols))
+    #     print(cluster_mols[0][:5])
+    #     print(type(cluster_mols[0]))
+        
+    # # elif args.c_method == 'k-medoids':
+    # #     fps = [] # list of rdkit.DataStructs.cDataStructs.ExplicitBitVect objects
+    # #     for mol in scaffold_mols:
+    # #         mol = Chem.AddHs(mol)
+    # #         fps.append(AllChem.GetMorganFingerprintAsBitVect(mol, 4, 1024))
 
 
-    #     fps_df = pd.DataFrame([list(fp) for fp in fps])
-    #     # Compute the Tanimoto distance matrix
-    #     distances = pdist(fps_df.values, metric='jaccard')
-    #     dist_matrix = squareform(distances)
-    #     # Create a KMedoids instance with the desired number of clusters
-    #     kmedoids = KMedoids(n_clusters = 2, metric='precomputed')
-    #     kmedoids.fit(dist_matrix)
-    #     clusters = kmedoids.labels_
-    #     # value counts of the clusters
-    #     print(pd.Series(clusters).value_counts())
+    # #     fps_df = pd.DataFrame([list(fp) for fp in fps])
+    # #     # Compute the Tanimoto distance matrix
+    # #     distances = pdist(fps_df.values, metric='jaccard')
+    # #     dist_matrix = squareform(distances)
+    # #     # Create a KMedoids instance with the desired number of clusters
+    # #     kmedoids = KMedoids(n_clusters = 2, metric='precomputed')
+    # #     kmedoids.fit(dist_matrix)
+    # #     clusters = kmedoids.labels_
+    # #     # value counts of the clusters
+    # #     print(pd.Series(clusters).value_counts())
         
         
 

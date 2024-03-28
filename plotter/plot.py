@@ -303,7 +303,7 @@ class Orig_Plotter(object):
                     hue = 'target'
                     palette = 'deep'
                     if 'train' in df_data['target'].values:
-                        color_dict = {'train': 'blue', 'valid': 'orange', 'test': 'green', 'aug': 'red'}
+                        color_dict = {'train': 'C0', 'valid': 'C1', 'test': 'C2', 'aug': 'red'}
                         palette = color_dict
                     if self.__target_type == "R":
                         palette = sns.color_palette("inferno", as_cmap=True)
@@ -323,14 +323,10 @@ class Orig_Plotter(object):
             
         # Create a plot based on the reduced components 
         if kind == "scatter":
-            # print(df_data.head())
-            # print(x)
-            # print(y)
-            # print(hue)
             if point_num is not None:
                 plot = sns.scatterplot(x=x, y=y, hue=hue, hue_order=hue_order, palette=palette, data=df_data, size='mol_num', legend='brief')
-                plot.legend(markerscale=size*0.08)
-                sns.move_legend(plot, "upper left", bbox_to_anchor=(1, 1)) 
+                plot.legend(markerscale=size*0.05)
+                sns.move_legend(plot, "upper right") 
             else:
                 plot = sns.scatterplot(x=x, y=y, hue=hue, hue_order=hue_order, palette=palette, data=df_data, s=3*size, legend='brief')
                 plot.legend(markerscale=size*0.08)
