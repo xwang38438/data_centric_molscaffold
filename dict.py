@@ -44,7 +44,7 @@ def get_ecfp_fingerprints(smiles_list, radius=4, nBits=1024):
 
 def main():
     parser = argparse.ArgumentParser(description='Scaffold-aware pipeline to cluster molecules')
-    parser.add_argument('--dataset', type=str, default='ogbg-moltox21',
+    parser.add_argument('--dataset', type=str, default='ogbg-molbace',
                         help='dataset name (default: ogbg-molbace)')
     
     parser.add_argument('--c_method', type=str, default='k-mean',
@@ -64,15 +64,37 @@ def main():
     smiles_df = pd.read_csv(smile_path, compression='gzip', usecols=['smiles'])
     smiles = smiles_df['smiles'].tolist() 
 
+    meta_dict = {
+        'num_tasks': labeled_dataset.num_tasks,
+        'eval_metric': labeled_dataset.eval_metric,
+        'task_type': labeled_dataset.task_type,
+        'num_classes': labeled_dataset.__num_classes__,
+        'binary': labeled_dataset.binary,
+    }
+    
+    cluster_dict = {
+        'cluster_method': 'k-mean',
+         'pca_dim': 3,
+         'n_clusters': 30,
+         'cutoff': 0.8,
+         'radius': 4,
+         'nBits': 1024      
+        
+    }
+
+  
     new_labeled_dataset = ogbg_with_smiles(name = args.dataset,
                                    root = './raw_data',
                                    data_list = labeled_dataset_list, 
                                    smile_list = smiles,
-                                   scaff_cluster=args.c_method)
+                                   clustering_params=cluster_dict,
+                                   meta_dict=meta_dict)
     
+
     # get molecules indices for train, valid, and test split 
     label_split_idx_scaffold = new_labeled_dataset.get_idx_split(split_type = 'scaffold')
-    print(new_labeled_dataset.scaff_cluster)
+    print(new_labeled_dataset[0])
+    print(new_labeled_dataset.get_metadata())
     print(new_labeled_dataset.get_cluster_info())
     
     

@@ -16,7 +16,66 @@ __all__ = ['build_augmentation_dataset']
 cls_criterion = torch.nn.BCEWithLogitsLoss(reduction='none')
 reg_criterion = torch.nn.MSELoss(reduction='none')
 
-# -------- get negative samples for infoNCE loss --------
+### -------- get topk molecules by considering diversity --------
+def topk_cluster_indices(losses, topk, labels):
+    """
+    Selects a total of `topk` indices with the lowest losses, distributed as evenly as possible across
+    different labels, and returns the selected indices along with their corresponding labels. If `topk`
+    is not evenly divisible by the number of unique labels, some labels will contribute more indices
+    than others, starting from the label with the lowest total loss.
+    
+    Parameters:
+    losses (torch.Tensor): The tensor containing the losses for each sample.
+    topk (int): The total number of indices to select.
+    labels (torch.Tensor): The tensor containing the labels for each sample.
+    
+    Returns:
+    torch.Tensor, torch.Tensor: Two tensors containing the indices of the selected samples and their
+    corresponding labels, respectively.
+    """
+    unique_labels = torch.unique(labels)
+    num_labels = len(unique_labels)
+    
+    # Calculate base top-k per label, and how many labels need an extra index
+    base_topk, extra = divmod(topk, num_labels)
+    
+    # Store (total_loss, label, num_indices) for each label
+    label_losses = []
+    
+    for label in unique_labels:
+        label_indices = torch.where(labels == label)[0]
+        label_losses.append((losses[label_indices].sum(), label, base_topk + (1 if extra > 0 else 0)))
+        extra -= 1
+    
+    # Sort labels by their total loss, so labels with lower total loss get priority for extra indices
+    label_losses.sort()
+    
+    selected_indices = []
+    selected_labels = []
+    
+    for _, label, num_indices in label_losses:
+        label_indices = torch.where(labels == label)[0]
+        label_losses = losses[label_indices]
+        
+        # Ensure not to exceed the available indices for the label
+        num_indices = min(len(label_indices), num_indices)
+        
+        # Get top-k indices for this label
+        _, topk_indices_label = torch.topk(label_losses, num_indices, largest=False, sorted=True)
+        selected_indices.append(label_indices[topk_indices_label])
+        selected_labels.append(torch.full((num_indices,), fill_value=label, dtype=labels.dtype))
+    
+    # Concatenate indices from all labels to form the final list
+    selected_indices = torch.cat(selected_indices)
+    selected_labels = torch.cat(selected_labels)
+    
+    return selected_indices, selected_labels
+    
+    
+    
+
+
+### -------- get negative samples for infoNCE loss --------
 def get_negative_indices(y_true, n_sample=10):
     """
     This function finds the indices of the samples that are most different from each sample in y_true, 
@@ -101,6 +160,7 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
             with torch.no_grad():
                 y_pred_logits = model(batch_data)[0]
             y_true_all, batch_index = batch_data.y.to(torch.float32), batch_data.batch
+            # ignore the unlabeled data
             is_labeled = y_true_all == y_true_all
             y_pred_logits[~is_labeled], y_true_all[~is_labeled] = 0, 0
 
@@ -265,6 +325,8 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
     new_dataset = NewDataset(kept_pyg_list, num_fail=augment_fails)
     return new_dataset, topk_mols
 
+### -------- NewDataset class for augmentation --------###
+# let the augmented data to inherit the original labels
 
 class NewDataset(InMemoryDataset):
     def __init__(self, data_list, num_fail=0, transform=None, pre_transform=None):

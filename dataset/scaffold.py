@@ -14,39 +14,67 @@ from sklearn.cluster import KMeans
 from rdkit.Chem import DataStructs
 import operator
 from rdkit.ML.Cluster import Butina
-
+import numpy as np
 
 
 ### Define the dataset class
 class ogbg_with_smiles(InMemoryDataset):
-    def __init__(self, name, root, data_list, scaff_cluster = None, smile_list = None, 
-                 pca_dim = 3, n_clusters = 10, cutoff = 0.6, radius = 4, nBits = 1024,
-                 transform=None, pre_transform=None):
+    
+    """
+
+    A dataset class for handling OGB datasets with SMILES representations.
+
+    Parameters:
+        name (str): The name of the dataset.
+        root (str): Root directory where the dataset should be saved.
+        data_list (list): List of data points.
+        clustering_params (dict, optional): Parameters related to clustering, including:
+            - scaff_cluster (str): The clustering method, 'k-mean' or 'butina'.
+            - smile_list (list): List of SMILES strings corresponding to `data_list`.
+            - pca_dim (int): Number of principal components for PCA.
+            - n_clusters (int): Number of clusters.
+            - cutoff (float): Cutoff distance for clustering.
+            - radius (int): Radius parameter for clustering.
+            - nBits (int): Number of bits for clustering.
+        transform (callable, optional): A function/transform that takes a data object and returns a transformed version.
+        pre_transform (callable, optional): A function/transform that is called before saving the dataset to disk.
+    """
+    
+    def __init__(self, name, root, data_list, smile_list = None, meta_dict = None,
+                 clustering_params=None, transform=None, pre_transform=None):
         super(ogbg_with_smiles, self).__init__(None, transform, pre_transform)
         self.root = root
         self.smile_list = smile_list
         self.total_data_len = len(data_list) 
         self.data_list = data_list
-        _ , self.scaffold_sets = generate_scaffolds_dict(smile_list)
-        
+        self.meta_dict = meta_dict
+
+        print(clustering_params)
         # add smiles and scaffold smiles to data_list
         if smile_list is not None:
+            _ , self.scaffold_sets = generate_scaffolds_dict(smile_list)
             for i in range(len(data_list)):
                 data_list[i].smiles = smile_list[i]
                 scaff_smiles = _generate_scaffold(smile_list[i])
                 data_list[i].scaff_smiles = scaff_smiles
 
-        if scaff_cluster is not None and smile_list is not None:
-            scaff_list = [data.scaff_smiles for data in data_list]
+            if clustering_params is not None:
+                cluster_method = clustering_params['cluster_method']
+                pca_dim = clustering_params['pca_dim']
+                n_clusters = clustering_params['n_clusters']
+                cutoff = clustering_params['cutoff']
+                radius = clustering_params['radius']
+                nBits = clustering_params['nBits']    
             
-            if scaff_cluster not in ['k-mean', 'butina']:
-                raise ValueError('Clustering method must be either k-mean or butina')
+                if cluster_method not in ['k-mean', 'butina']:
+                    raise ValueError('Clustering method must be either k-mean or butina')
             
-            else:
-                cluster_labels = assign_scaff_cluster(scaff_list, method=scaff_cluster, n_clusters=n_clusters, pca_dim=pca_dim,
-                                                    cutoff=cutoff, radius=radius, nBits=nBits)
-                for i in range(len(data_list)):
-                    data_list[i].scaff_cluster = cluster_labels[i]
+                else:
+                    print('test')
+                    cluster_labels = assign_scaff_cluster(smile_list, method=cluster_method, n_clusters=n_clusters, pca_dim=pca_dim,
+                                                        cutoff=cutoff, radius=radius, nBits=nBits)
+                    for i in range(len(data_list)):
+                        data_list[i].cluster_id = cluster_labels[i]
         
         self.data, self.slices = self.collate(data_list)
                      
@@ -54,9 +82,15 @@ class ogbg_with_smiles(InMemoryDataset):
         self.name = '_'.join(name.split('-'))
         self.smile_list = smile_list
     
+    def get_metadata(self):
+        if self.meta_dict is None:
+            raise ValueError('No metadata found')
+        
+        return self.meta_dict
+    
     def get_cluster_info(self):
         # output value counts of the cluster labels
-        return pd.Series([data.scaff_cluster for data in self.data_list]).value_counts()
+        return pd.Series([data.cluster_id for data in self.data_list]).value_counts()
     
     def get_scaffold_sets(self):
         return self.scaffold_sets
@@ -259,7 +293,7 @@ def assign_scaff_cluster(scaff_list, method = 'k-mean', n_clusters = 10, pca_dim
         cluster_labels = kmeans.labels_
         if len(cluster_labels) != len(scaff_mols):
             raise ValueError('The number of cluster labels is not equal to the number of scaffold molecules')
-        print(f"K-mean Assigned {len(scaff_mols)} scaffold molecules to {n_clusters} clusters")
+        print(f"K-mean Assigned {len(scaff_mols)} molecules to {n_clusters} clusters")
         return cluster_labels.tolist()
         
     elif method == 'butina':
@@ -291,19 +325,14 @@ def assign_scaff_cluster(scaff_list, method = 'k-mean', n_clusters = 10, pca_dim
             for index in cluster:
                 cluster_labels[index] = cluster_label
 
-        print(f'Butina Assigned {len(scaff_mols)} scaffold molecules to {len(cluster_indices)} clusters')
+        print(f'Butina Assigned {len(scaff_mols)} molecules to {len(cluster_indices)} clusters')
         return cluster_labels
        
     else:
         raise ValueError('Clustering method must be either k-mean or butina')
 
 
-from rdkit import Chem
-from rdkit.Chem import AllChem
-from rdkit import DataStructs
-import numpy as np
-
-def get_tanimoto_similarity(smile_list, radius=4, nBits=1024):
+def get_tanimoto_similarity_matrix(smile_list, radius=4, nBits=1024):
     smile_mols = [Chem.MolFromSmiles(scaffold) for scaffold in smile_list]
     ecfp = []
     for mol in smile_mols:
@@ -317,16 +346,20 @@ def get_tanimoto_similarity(smile_list, radius=4, nBits=1024):
             print(f"Error generating Morgan fingerprint: {e}")
             ecfp.append(None)
 
-    sims = []
     n_mols = len(smile_mols)
+    sim_matrix = np.zeros((n_mols, n_mols))  # Initialize similarity matrix
 
-    for i in range(1, n_mols):
-        # If the current ECFP or any previous ECFP is None, add NaNs instead of calculating distances
-        if ecfp[i] is None or any(x is None for x in ecfp[:i]):
-            sims.extend([np.nan] * i)  # Add NaN for each comparison that cannot be made
-        else:
-            # Calculate Tanimoto similarity for non-None fingerprints
-            sim = DataStructs.BulkTanimotoSimilarity(ecfp[i], ecfp[:i])
-            sims.extend([x for x in sim])
-            
-    return sims
+    for i in range(n_mols):
+        for j in range(i+1, n_mols):  # Only compute upper triangle
+            if ecfp[i] is None or ecfp[j] is None:
+                sim_matrix[i, j] = np.nan
+                sim_matrix[j, i] = np.nan
+            else:
+                sim = DataStructs.TanimotoSimilarity(ecfp[i], ecfp[j])
+                sim_matrix[i, j] = sim
+                sim_matrix[j, i] = sim  # Symmetric matrix
+
+    for i in range(n_mols):  # Fill the diagonal with 1s for self-similarity
+        sim_matrix[i, i] = 1.0
+
+    return sim_matrix
