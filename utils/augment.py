@@ -148,6 +148,7 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
     label_split_idx = labeled_data.get_idx_split(split_type = split)
     kept_pyg_list = []
     augmented_pyg_list = []
+    augmented_cluster_labels_list = []
     augment_fails = 0
 
     labeled_trainloader = DataLoader(labeled_data[label_split_idx["train"]], batch_size=args.aug_batch, shuffle=False, num_workers = 0)
@@ -172,7 +173,11 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
 
 ### need to check the topk_indices
             
-            topk_indices = torch.topk(criterion(y_pred_logits.view(y_true_all.size()).to(torch.float32), y_true_all).view(y_true_all.size()).sum(dim=-1), selected_topk, largest=False, sorted=True).indices
+            # topk_indices = torch.topk(criterion(y_pred_logits.view(y_true_all.size()).to(torch.float32), y_true_all).view(y_true_all.size()).sum(dim=-1), selected_topk, largest=False, sorted=True).indices
+            errors = criterion(y_pred_logits.view(y_true_all.size()).to(torch.float32), y_true_all).view(y_true_all.size()).sum(dim=-1)
+            cluster_labels = batch_data.cluster_id
+            topk_indices, topk_cluster_labels = topk_cluster_indices(errors, selected_topk, cluster_labels)
+            
             # get molecules of the topk indices
             topk_mols = [batch_data_list[i] for i in topk_indices]
             # append to the dict with the key as the step
@@ -309,24 +314,59 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
 
             augment_indices = augment_mask.nonzero().view(-1).cpu().tolist()
             augmented_pyg_list_temp = []
-            for pyg_data in batch_augment_pyg_list:
+            # augmented_cluter_label_temp = []
+
+            assert len() == len(batch_augment_pyg_list)
+            # integrate cluster labels in the augmented data
+            for pyg_data, cluster_label in zip(batch_augment_pyg_list, topk_cluster_labels):
                 if not isinstance(pyg_data, int):
+                    # add cluster labels to the augmented data
+                    pyg_data.cluster_id = cluster_label
                     augmented_pyg_list_temp.append(pyg_data)
                 elif args.strategy.split('_')[0] == 'add':
+                    # fail and the strategy is add: do nothing
                     pass
                 else:
+                    # fail and the strategy is replace: add the original data
                     augment_fails += 1
                     kept_pyg_list.append(batch_data_list[augment_indices[pyg_data]])
-
+                    # augmented_cluter_label_temp.append(cluster_label)
+            
+            # get all the augmented data 
+            # augmented_cluster_labels_list.extend(augmented_cluter_label_temp)
             augmented_pyg_list.extend(augmented_pyg_list_temp)
-    
+
+            
     
     kept_pyg_list.extend(augmented_pyg_list)
-    new_dataset = NewDataset(kept_pyg_list, num_fail=augment_fails)
+    # need to modify this process
+    
+    new_dataset = ClusterNewDataset(kept_pyg_list, num_fail=augment_fails)
     return new_dataset, topk_mols
 
 ### -------- NewDataset class for augmentation --------###
 # let the augmented data to inherit the original labels
+
+class ClusterNewDataset(InMemoryDataset):
+    def __init__(self, data_list, num_fail=0, transform=None, pre_transform=None):
+        super().__init__(None, transform, pre_transform)
+        self.data_list = data_list
+        self.data_len = len(data_list)
+        self.num_fail = num_fail
+        # print('data_len', self.data_len, 'num_fail', num_fail)
+        for data in self.data_list:
+            
+        ### apply graph to mol
+            if 'smiles' not in data:
+                data['smiles'] = ''
+                data['scaff_smiles'] = ''
+        
+        self.data, self.slices = self.collate(data_list)
+    def get_idx_split(self, split_type = 'none'):
+        return {'train': torch.arange(self.data_len, dtype = torch.long), 'valid': None, 'test': None}
+
+
+
 
 class NewDataset(InMemoryDataset):
     def __init__(self, data_list, num_fail=0, transform=None, pre_transform=None):

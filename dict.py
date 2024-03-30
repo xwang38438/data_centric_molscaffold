@@ -75,7 +75,7 @@ def main():
     cluster_dict = {
         'cluster_method': 'k-mean',
          'pca_dim': 3,
-         'n_clusters': 30,
+         'n_clusters': 25,
          'cutoff': 0.8,
          'radius': 4,
          'nBits': 1024      
@@ -93,12 +93,17 @@ def main():
 
     # get molecules indices for train, valid, and test split 
     label_split_idx_scaffold = new_labeled_dataset.get_idx_split(split_type = 'scaffold')
-    print(new_labeled_dataset[0])
-    print(new_labeled_dataset.get_metadata())
-    print(new_labeled_dataset.get_cluster_info())
+    mol = new_labeled_dataset[0]
+    print(mol)
+    mol.test = True
+    print(mol)
+    print(labeled_dataset[0])
+    
+    # print(new_labeled_dataset.get_metadata())
+    # print(new_labeled_dataset.get_cluster_info())
     
     
-    
+
     
     
     # # derive the scaffold smiles for all molecules
