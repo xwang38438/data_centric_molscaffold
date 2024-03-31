@@ -112,7 +112,7 @@ def inner_sampling(args, generator, x, adj, sde_x, sde_adj, diff_steps, flags=No
     predictor_obj_adj = ReverseDiffusionPredictor('adj', sde_adj, score_fn_adj, False, perturb_ratio=args.perturb_ratio)
     corrector_obj_adj = LangevinCorrector('adj', sde_adj, score_fn_adj, snr, scale_eps, n_steps, perturb_ratio=args.perturb_ratio)
     
-    # 
+    
     x, adj = mask_x(x, flags), mask_adjs(adj, flags)
     total_sample_steps = args.out_steps
     timesteps = torch.linspace(1, 1e-3, total_sample_steps, device=args.device)[-diff_steps:]
@@ -316,12 +316,14 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
             augmented_pyg_list_temp = []
             # augmented_cluter_label_temp = []
 
-            assert len() == len(batch_augment_pyg_list)
+            assert len(topk_cluster_labels) == len(batch_augment_pyg_list)
+            # print(topk_cluster_labels)
+            
             # integrate cluster labels in the augmented data
             for pyg_data, cluster_label in zip(batch_augment_pyg_list, topk_cluster_labels):
                 if not isinstance(pyg_data, int):
                     # add cluster labels to the augmented data
-                    pyg_data.cluster_id = cluster_label
+                    pyg_data.cluster_id = torch.tensor([cluster_label], dtype=torch.long)
                     augmented_pyg_list_temp.append(pyg_data)
                 elif args.strategy.split('_')[0] == 'add':
                     # fail and the strategy is add: do nothing
@@ -336,8 +338,8 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
             # augmented_cluster_labels_list.extend(augmented_cluter_label_temp)
             augmented_pyg_list.extend(augmented_pyg_list_temp)
 
+
             
-    
     kept_pyg_list.extend(augmented_pyg_list)
     # need to modify this process
     
@@ -353,7 +355,6 @@ class ClusterNewDataset(InMemoryDataset):
         self.data_list = data_list
         self.data_len = len(data_list)
         self.num_fail = num_fail
-        # print('data_len', self.data_len, 'num_fail', num_fail)
         for data in self.data_list:
             
         ### apply graph to mol
@@ -364,7 +365,6 @@ class ClusterNewDataset(InMemoryDataset):
         self.data, self.slices = self.collate(data_list)
     def get_idx_split(self, split_type = 'none'):
         return {'train': torch.arange(self.data_len, dtype = torch.long), 'valid': None, 'test': None}
-
 
 
 

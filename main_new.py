@@ -133,16 +133,35 @@ def main(args):
     labeled_dataset = get_dataset(args, './raw_data')
     labeled_dataset_list = [data for data in labeled_dataset]
     
+    # define clustering parameters
+    meta_dict = {
+        'num_tasks': labeled_dataset.num_tasks,
+        'eval_metric': labeled_dataset.eval_metric,
+        'task_type': labeled_dataset.task_type,
+        'num_classes': labeled_dataset.__num_classes__,
+        'binary': labeled_dataset.binary,
+    }
+    
+    cluster_dict = {
+        'cluster_method': args.cluster_method,
+         'pca_dim': args.pca_dim,
+         'n_clusters': args.n_clusters,
+         'cutoff': args.cut_off,
+         'radius': args.radius,
+         'nBits': args.n_bits        
+    }
+    
     new_labeled_dataset = ogbg_with_smiles(name = args.dataset,
-                                           root = './raw_data',
-                                           data_list = labeled_dataset_list,
-                                           smile_list = smiles)
+                                   root = './raw_data',
+                                   data_list = labeled_dataset_list, 
+                                   smile_list = smiles,
+                                   clustering_params=cluster_dict,
+                                   meta_dict=meta_dict)
     
     if args.split == 'scaffold':
         label_split_idx = new_labeled_dataset.get_idx_split(split_type = 'scaffold')
     else:
         label_split_idx = new_labeled_dataset.get_idx_split()
-    
     
     
     args.num_trained = len(label_split_idx["train"])
@@ -184,10 +203,7 @@ def main(args):
         train_perf = validate(args, model, labeled_trainloader)
         valid_perf = validate(args, model, valid_loader)
 
-        if epoch >= args.start and epoch % args.iteration == 0 and args.augment=='True':
-            if epoch <= 50:
-                print('------------- Augmentation --------------')
-            
+        if epoch >= args.start and epoch % args.iteration == 0:            
             # need to update the labeled dataset
             new_dataset, topk_mols = build_augmentation_dataset(args, model, generator, new_labeled_dataset, split=args.split)
             topk_mols_dict[epoch] = topk_mols
@@ -230,6 +246,7 @@ def main(args):
                 cnt_wait += 1
                 if cnt_wait > args.patience:
                     break
+
     print('Finished training! Best validation results from epoch {}.'.format(best_epoch))
     print_info('train', best_train_perf)
     print_info('valid', best_valid_perf)
@@ -293,4 +310,4 @@ if __name__ == '__main__':
             results_df[f'{metric}_std'] = std
     
     
-    results_df.to_csv(f'{results_dir}/{args.model}_{args.augment}_{args.split}.csv', index=False)
+    results_df.to_csv(f'{results_dir}/{args.model}_{args.cluster_method}_{args.n_clusters}_top{args.topk}.csv', index=False)

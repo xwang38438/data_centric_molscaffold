@@ -70,8 +70,8 @@ class ogbg_with_smiles(InMemoryDataset):
                     raise ValueError('Clustering method must be either k-mean or butina')
             
                 else:
-                    print('test')
-                    cluster_labels = assign_scaff_cluster(smile_list, method=cluster_method, n_clusters=n_clusters, pca_dim=pca_dim,
+                    scaff_smiles_list = [data.scaff_smiles for data in data_list]
+                    cluster_labels = assign_scaff_cluster(scaff_smiles_list, method=cluster_method, n_clusters=n_clusters, pca_dim=pca_dim,
                                                         cutoff=cutoff, radius=radius, nBits=nBits)
                     for i in range(len(data_list)):
                         data_list[i].cluster_id = cluster_labels[i]
@@ -293,7 +293,7 @@ def assign_scaff_cluster(scaff_list, method = 'k-mean', n_clusters = 10, pca_dim
         cluster_labels = kmeans.labels_
         if len(cluster_labels) != len(scaff_mols):
             raise ValueError('The number of cluster labels is not equal to the number of scaffold molecules')
-        print(f"K-mean Assigned {len(scaff_mols)} molecules to {n_clusters} clusters")
+        print(f"K-mean Assigned {len(set(scaff_mols))} scaffolds to {n_clusters} clusters")
         return cluster_labels.tolist()
         
     elif method == 'butina':

@@ -6,20 +6,30 @@ num_layer: 3
 readout: max
 norm_layer: size_norm
 
+# clusters
+cluster_method: 'k-mean'
+pca_dim: 3
+n_clusters: 50
+cut_off': 0.8
+radius: 4
+n_bits: 1024    
+
 # learning
 lr: 0.0001
 wdecay: 0.0001
-batch_size: 2048
+batch_size: 2024
 patience: 300
 
 # diffusion-based augmentation
 n_negative: 5
 out_steps: 5
-topk: 100
+topk: 200
 aug_batch: 2000
-start: 20 # no augmentation
+start: 80 # no augmentation
 iteration: 20
-strategy: replace_accumulate
+strategy: add_accumulate
+
+# original:replace_accumulate
 snr: 1
 scale_eps: 0.
 perturb_ratio: 0.02

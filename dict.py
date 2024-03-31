@@ -82,7 +82,6 @@ def main():
         
     }
 
-  
     new_labeled_dataset = ogbg_with_smiles(name = args.dataset,
                                    root = './raw_data',
                                    data_list = labeled_dataset_list, 

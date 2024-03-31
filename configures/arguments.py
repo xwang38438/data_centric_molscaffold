@@ -8,33 +8,38 @@ def load_arguments_from_yaml(filename):
 
 def get_args():
     parser = argparse.ArgumentParser(description='Data-Centric Learning from Unlabeled Graphs with Diffusion Model')
-    
-    parser.add_argument('--split', type=str, default='random',
+    # cluster
+    parser.add_argument('--split', type=str, default='scaffold',
                         help='split type (random or scaffold)')
-    
     parser.add_argument('--get_topk_mols', type = bool, default = False,
                         help='get top k mols in each augmentation set')
-    parser.add_argument('--augment', type = str, default = "True",
-                        help='augment the training set')
+    parser.add_argument('--cluster_method', type = str, default = "k-mean",
+                        help='cluster method to assign labels to molecule scaffolds')
+    parser.add_argument('--n_clusters', type = int, default = 30,
+                        help='number of scaffold clusters')
+    parser.add_argument('--pca_dim', type = int, default = 3,
+                        help='dimension of the embedding vector of the ECFP fingerprint after PCA')
+    parser.add_argument('--cut_off', type = float, default = 0.8,
+                        help='cut off for the Butina clustering method')
+    parser.add_argument('--radius', type = int, default = 4,
+                        help='radius for the ECFP fingerprint')
+    parser.add_argument('--n_bits', type = int, default = 1024,
+                        help='number of bits for the ECFP fingerprint')
+    
     parser.add_argument('--gpu-id', type=int, default=0,
                         help='which gpu to use if any (default: 0)')
     parser.add_argument('--num-workers', type=int, default=0,
                         help='number of workers for data loader')
     parser.add_argument('--no-print', action='store_true', default=False,
                         help="don't use progress bar")
-
-    parser.add_argument('--dataset', default="ogbg-molsider", type=str,
+    parser.add_argument('--dataset', default="ogbg-molbace", type=str,
                         choices=['plym-density', 'plym-oxygen', 'plym-melting', 'plym-glass', 'plym-thermal',
                                 'ogbg-mollipo', 'ogbg-molfreesolv', 'ogbg-molesol', 
                                 'ogbg-molhiv', 'ogbg-molbace', 'ogbg-molbbbp', 'ogbg-molclintox','ogbg-molsider','ogbg-moltox21','ogbg-moltoxcast'],
                         help='dataset name (plym-, ogbg-)')
-    
     # model
     parser.add_argument('--model', type=str, default='gin-virtual',
                         help='GNN gin, gin-virtual, or gcn, or gcn-virtual (default: gin-virtual)')
-    parser.add_argument('--GAT_head', type=int, default=4,
-                        help='number of heads in GAT')
-    
     parser.add_argument('--readout', type=str, default='sum',
                         help='graph readout (default: sum)')
     parser.add_argument('--norm-layer', type=str, default='batch_norm', 
