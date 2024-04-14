@@ -6,18 +6,27 @@ emb_dim: 64
 initw_name: kaiming
 drop_ratio: 0.8
 
+# clusters
+cluster_method: 'k-mean'
+pca_dim: 3
+# n_clusters: 50
+cut_off': 0.8
+radius: 4
+n_bits: 1024  
+
 #learning
 epochs: 80
 
 # diffusion-based augmentation
 n_negative: 10
-out_steps: 2
-topk: 15
+out_steps: 5
+# topk: 300
 aug_batch: 3000
 start: 10
 #start: 500
 iteration: 5
-strategy: add_accumulate
+# strategy: add_accumulate
+end: 75
 snr: 0.5
 scale_eps: 0.
 perturb_ratio: 1

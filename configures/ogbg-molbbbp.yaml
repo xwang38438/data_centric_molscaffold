@@ -1,23 +1,32 @@
 dataset: ogbg-molbbbp
-
+epochs: 350
 # model
 num_layer: 2
 emb_dim: 128
 drop_ratio: 0.8
+
+# clusters
+cluster_method: 'k-mean'
+pca_dim: 3
+# n_clusters: 50
+cut_off': 0.8
+radius: 4
+n_bits: 1024   
 
 # learning
 wdecay: 0
 batch_size: 2048
 
 # diffusion-based augmentation
-n_negative: 1
-out_steps: 2
-topk: 30
+# n_negative: 5
+# out_steps: 5
+# topk: 30
 aug_batch: 2000
-start: 20
-iteration: 20
-strategy: add_once
+start: 60
+iteration: 10
+# strategy: add_once
 snr: 0.2
+end: 300
 scale_eps: 0
 perturb_ratio: 0.02
 

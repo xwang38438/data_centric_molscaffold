@@ -197,16 +197,18 @@ def main(args):
     logger.info(f"  Total optimization steps = {args.epochs * args.steps}")
     train_loaders = {'labeled_iter': iter(labeled_trainloader),'labeled_trainloader': labeled_trainloader} 
     
-    topk_mols_dict = {}   
+    # topk_mols_dict = {}
+    aug_label_dist = []   
     for epoch in range(0, args.epochs):
         train_loaders = train(args, model, train_loaders, optimizer, scheduler, epoch)
         train_perf = validate(args, model, labeled_trainloader)
         valid_perf = validate(args, model, valid_loader)
 
-        if epoch >= args.start and epoch % args.iteration == 0:            
+        if epoch >= args.start and epoch % args.iteration == 0 and epoch < args.end:            
             # need to update the labeled dataset
             new_dataset, topk_mols = build_augmentation_dataset(args, model, generator, new_labeled_dataset, split=args.split)
-            topk_mols_dict[epoch] = topk_mols
+            # topk_mols_dict[epoch] = topk_mols
+            aug_label_dist.extend([mol.y for mol in topk_mols])
             
             if args.dataset == 'ogbg-molhiv':
                 sampler = ImbalancedSampler(new_dataset, new_dataset.get_idx_split()["train"])
@@ -217,7 +219,6 @@ def main(args):
             args.num_trained = len(new_trainloader.dataset)
             args.steps = args.num_trained // args.batch_size + 1
             if args.strategy.split('_')[-1] == 'accumulate':
-                # consider change
                 new_labeled_dataset = new_dataset
             if len(new_trainloader.dataset) > args.num_trained_init * 2:
                 args.strategy = 'replace' + '_' + args.strategy.split('_')[-1]
@@ -254,11 +255,12 @@ def main(args):
     # save topk_mols_dict
     if args.get_topk_mols:
     
-        os.makedirs(f'./results/{args.dataset}', exist_ok=True)
+        os.makedirs(f'./figures/label_imbalance/', exist_ok=True)
+        torch.save(aug_label_dist, f'./figures/label_imbalance/{args.dataset}_{args.model}_nc{args.n_clusters}_topk{args.topk}.pt')
 
         # Save the dictionary as a pickle file
-        with gzip.open(f'./results/{args.dataset}/{args.split}_{args.model}_topk_mols.pkl.gz', 'wb') as f:
-            pickle.dump(topk_mols_dict, f)
+        # with gzip.open(f'./results/{args.dataset}/{args.split}_{args.model}_topk_mols.pkl.gz', 'wb') as f:
+        #     pickle.dump(topk_mols_dict, f)
         
     return best_train_perf, best_valid_perf, test_perf
 
@@ -310,4 +312,4 @@ if __name__ == '__main__':
             results_df[f'{metric}_std'] = std
     
     
-    results_df.to_csv(f'{results_dir}/{args.model}_{args.cluster_method}_{args.n_clusters}_top{args.topk}.csv', index=False)
+    results_df.to_csv(f'{results_dir}/{args.model}_{args.cluster_method}_{args.n_clusters}_top{args.topk}_{args.strategy}_nn{args.n_negative}.csv', index=False)

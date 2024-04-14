@@ -1,5 +1,7 @@
 dataset: ogbg-molbace
 
+epochs: 350
+
 # model
 model: gin
 num_layer: 3
@@ -9,7 +11,7 @@ norm_layer: size_norm
 # clusters
 cluster_method: 'k-mean'
 pca_dim: 3
-n_clusters: 50
+# n_clusters: 50
 cut_off': 0.8
 radius: 4
 n_bits: 1024    
@@ -17,17 +19,18 @@ n_bits: 1024
 # learning
 lr: 0.0001
 wdecay: 0.0001
-batch_size: 2024
+batch_size: 2048
 patience: 300
 
 # diffusion-based augmentation
-n_negative: 5
-out_steps: 5
-topk: 200
-aug_batch: 2000
-start: 80 # no augmentation
-iteration: 20
-strategy: add_accumulate
+# n_negative: 5
+# out_steps: 5
+# topk: 120
+aug_batch: 2048
+start: 60 # no augmentation
+end: 300
+iteration: 10
+# strategy: add_accumulate
 
 # original:replace_accumulate
 snr: 1

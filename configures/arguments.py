@@ -68,6 +68,8 @@ def get_args():
     # augmentation
     parser.add_argument('--start', type=int, default=20,
                         help="start epoch for augmentation")
+    parser.add_argument('--end', type=int, default=350,
+                        help="end epoch for augmentation")
     parser.add_argument('--iteration', type=int, default=20,
                         help='epoch to do augmentation')
     parser.add_argument('--strategy', default="replace_accumulate", type=str,
@@ -76,9 +78,9 @@ def get_args():
                                 Replace or add to the original examples; Accumulate the augmented examples or not')
     parser.add_argument('--n-jobs', type=int, default=22,
                         help='# process to convert the dense adj input to pyg input form')
-    parser.add_argument('--n-negative', type=int, default=5,
+    parser.add_argument('--n_negative', type=int, default=5,
                         help='# negative samples to optimize the augmented example')
-    parser.add_argument('--out-steps', type=int, default=5,
+    parser.add_argument('--out_steps', type=int, default=5,
                         help='outer sampling steps for guided reverse diffusion')
     parser.add_argument('--topk', type=int, default=100,
                         help='top k in an augmentation batch ')

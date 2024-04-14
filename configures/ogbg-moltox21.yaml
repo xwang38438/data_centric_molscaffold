@@ -4,20 +4,27 @@ dataset: ogbg-moltox21
 num_layer: 3
 readout: mean
 
+cluster_method: 'k-mean'
+pca_dim: 3
+# n_clusters: 50
+cut_off': 0.8
+radius: 4
+n_bits: 1024  
+
 # learning
 lr: 0.001
 wdecay: 0.0002
-batch_size: 1024
+batch_size: 2024
 # patience: 100
 
 # diffusion-based augmentation
-n_negative: 1
-out_steps: 1
-topk: 20
-aug_batch: 10000
-start: 20
+# n_negative: 5
+out_steps: 5
+# topk: 50
+aug_batch: 1024
+start: 60
 iteration: 10
-strategy: add_once
+# strategy: add_accumulate
 snr: 1
 scale_eps: 0
 perturb_ratio: 0.2
