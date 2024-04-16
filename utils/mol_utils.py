@@ -134,7 +134,8 @@ def extract_structure_feature(x, adj, node_mask):
 
 
 # -------- utils to convert sparse input to dense input: score model is pretrained on QM9(alterative ZINC250K): input of the augmentation --------
-def split_edge_attr(edge_attr):
+# keep
+def split_edge_attr(edge_attr): 
     enable_edge_attr_indices = (edge_attr < 4).nonzero()
     disable_edge_attr_indices = (edge_attr >= 4).nonzero()
     disable_edge_attr = edge_attr.clone()
@@ -144,7 +145,7 @@ def split_edge_attr(edge_attr):
 
 def convert_sparse_to_dense(batch_index, node_feature, edge_index, edge_attr, augment_mask=None, return_node_mask=True):
     edge_attr = edge_attr[:,0].view(-1) + 1 # index 0/1/2/3/4 to bond type S, D, T, AROMATIC and misc
-    max_count = torch.unique(batch_index, return_counts=True)[1].max()
+    max_count = torch.unique(batch_index, return_counts=True)[1].max() # 50
     # process edge matrix B, N, N
     enable_edge_attr, disable_edge_attr = split_edge_attr(edge_attr)
     dense_enable_adj = to_dense_adj(edge_index, batch=batch_index, edge_attr=enable_edge_attr, max_num_nodes=max_count).to(torch.float32)
@@ -153,16 +154,19 @@ def convert_sparse_to_dense(batch_index, node_feature, edge_index, edge_attr, au
         dense_enable_adj = dense_enable_adj[augment_mask]
         dense_disable_adj = dense_disable_adj[augment_mask]
     # process node feature B, N, F
+    # need to update the node features 
     atomic_num = node_feature[:,0].view(-1) + 1
+    # keep
     dense_atomic_num, node_mask = to_dense_batch(atomic_num, batch=batch_index, max_num_nodes=max_count) # B, N=max_cout, F=None
     if augment_mask is not None:
         dense_atomic_num = dense_atomic_num[augment_mask]
     # 6: C, 7: N, 8: O, 9: F etc.
     dense_one_hot = torch.nn.functional.one_hot(dense_atomic_num, num_classes=120).to(torch.float32)[:,:,1:] # (B N F), F = [0, 1~118, misc]
-    enbale_index = torch.LongTensor([5,6,7,8])
-    enable_mask = torch.zeros(119).scatter_(0, enbale_index, 1).bool()
-    dense_x = dense_one_hot[:,:,enable_mask]
-    dense_x_disable = dense_one_hot[:,:,~enable_mask]
+    # enable all index
+    # enbale_index = torch.LongTensor([5,6,7,8])
+    # enable_mask = torch.zeros(119).scatter_(0, enbale_index, 1).bool()
+    dense_x = dense_one_hot #[:,:,enable_mask]
+    dense_x_disable = dense_one_hot#[:,:,~enable_mask]
     if return_node_mask:
         return dense_x, dense_x_disable, dense_enable_adj, dense_disable_adj, node_mask
     else:
@@ -187,6 +191,8 @@ def quantize_mol(adjs):
     adjs[torch.bitwise_and(adjs >= 0.5, adjs < 1.5)] = 1
     adjs[adjs < 0.5] = 0
     return adjs
+
+# may need to change this 
 def combine_graph_inputs(x, x_disable, adj, adj_disable, mode='continuous'):
     assert mode in ['continuous', 'discrete']
     x_disable = x_disable.to(x.device)

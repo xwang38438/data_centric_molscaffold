@@ -49,7 +49,6 @@ def topk_cluster_indices(losses, topk, labels):
     
     # Sort labels by their total loss, so labels with lower total loss get priority for extra indices
     label_losses.sort()
-    
     selected_indices = []
     selected_labels = []
     
@@ -72,9 +71,6 @@ def topk_cluster_indices(losses, topk, labels):
     return selected_indices, selected_labels
     
     
-    
-
-
 ### -------- get negative samples for infoNCE loss --------
 def get_negative_indices(y_true, n_sample=10):
     """
@@ -198,6 +194,7 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
             batch_dense_x, batch_dense_x_disable, batch_dense_enable_adj, batch_dense_disable_adj, batch_node_mask = \
                 convert_sparse_to_dense(batch_index, batch_data.x, batch_data.edge_index, batch_data.edge_attr, augment_mask=None)
 
+            ## this part is confusing
             if batch_dense_x_disable is None:
                 ori_x, ori_adj = batch_dense_x.clone(), batch_dense_enable_adj.clone()
             else:
@@ -212,6 +209,7 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
         
             # sde
             total_sample_steps = args.out_steps
+            # zinc sigma_min = 0.2
             sde_x = VESDE(sigma_min=0.1, sigma_max=1, N=total_sample_steps)
             sde_adj = VESDE(sigma_min=0.1, sigma_max=1, N=total_sample_steps)
             
@@ -243,6 +241,8 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
 
                 inner_output_x,  inner_output_adj = inner_output_x.requires_grad_(), inner_output_adj.requires_grad_()
                 with torch.enable_grad():
+                    
+                    ## may need to modify this part
                     if batch_dense_x_disable is None:
                         inner_x_all, inner_adj_all = inner_output_x, inner_output_adj
                     else:
@@ -253,6 +253,8 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
                     bdata_y = augment_labels.view(inner_x_all.size(0), -1)
                     node_feature_encoded = estimate_feature_embs(inner_x_all[batch_node_mask[augment_mask]], batch_data, prediction_model, obj='node')
                     edge_attr_encoded = estimate_feature_embs(edge_attr, batch_data, prediction_model, obj='edge')
+                    
+                    # initialize the batched noisy data in the diffusion process
                     bdata = Data(x=node_feature_encoded, edge_index=edge_index, edge_attr=edge_attr_encoded, y=bdata_y, batch=bdata_batch_index)
                     
                     if inner_output_x.shape[0] > 1:
