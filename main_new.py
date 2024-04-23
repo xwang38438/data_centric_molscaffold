@@ -182,7 +182,7 @@ def main(args):
     model = GNN(gnn_type = args.model, num_tasks = labeled_dataset.num_tasks, num_layer = args.num_layer, emb_dim = args.emb_dim, 
                 drop_ratio = args.drop_ratio, graph_pooling = args.readout, norm_layer = args.norm_layer).to(device)
     
-    generator = load_generator(device, path='checkpoints/qm9_denoise.pth')
+    generator = load_generator(device, path='checkpoints/pcba_denoise.pth')
     init_weights(model, args.initw_name, init_gain=0.02)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wdecay)
@@ -206,11 +206,14 @@ def main(args):
 
         if epoch >= args.start and epoch % args.iteration == 0 and epoch < args.end:            
             # need to update the labeled dataset
+            print('start one round of augmentation')
             new_dataset, topk_mols = build_augmentation_dataset(args, model, generator, new_labeled_dataset, split=args.split)
+            print('end one round of augmentation')
+
             # topk_mols_dict[epoch] = topk_mols
             aug_label_dist.extend([mol.y for mol in topk_mols])
             
-            if args.dataset == 'ogbg-molhiv':
+            if args.dataset == 'ogbg-molhiv':  # may apply to all imbalanced datasets
                 sampler = ImbalancedSampler(new_dataset, new_dataset.get_idx_split()["train"])
                 new_trainloader = DataLoader(new_dataset, batch_size=args.batch_size, sampler=sampler,num_workers = args.num_workers)        
             else:

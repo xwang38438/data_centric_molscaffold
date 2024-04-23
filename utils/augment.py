@@ -96,18 +96,17 @@ def get_negative_indices(y_true, n_sample=10):
 
 
 def inner_sampling(args, generator, x, adj, sde_x, sde_adj, diff_steps, flags=None):
-    
     # get the score functions for node features and adjacency matrix
     score_fn_x = get_score_fn(sde_x, generator['model_x'], perturb_ratio=args.perturb_ratio)
     score_fn_adj = get_score_fn(sde_adj, generator['model_adj'], perturb_ratio=args.perturb_ratio)
     
+    # parameters for the langevin dynamics
     snr, scale_eps, n_steps= args.snr, args.scale_eps, args.n_steps
     
     predictor_obj_x = ReverseDiffusionPredictor('x', sde_x, score_fn_x, False, perturb_ratio=args.perturb_ratio)
     corrector_obj_x = LangevinCorrector('x', sde_x, score_fn_x, snr, scale_eps, n_steps, perturb_ratio=args.perturb_ratio)
     predictor_obj_adj = ReverseDiffusionPredictor('adj', sde_adj, score_fn_adj, False, perturb_ratio=args.perturb_ratio)
     corrector_obj_adj = LangevinCorrector('adj', sde_adj, score_fn_adj, snr, scale_eps, n_steps, perturb_ratio=args.perturb_ratio)
-    
     
     x, adj = mask_x(x, flags), mask_adjs(adj, flags)
     total_sample_steps = args.out_steps
@@ -127,8 +126,8 @@ def inner_sampling(args, generator, x, adj, sde_x, sde_adj, diff_steps, flags=No
 
 ## -------- Main function for augmentation--------##
 def build_augmentation_dataset(args, model, generator, labeled_data, split):
-    
-    # topk_mols_dict = {}
+    # what molecules are selected for augmentation
+    # topk_mols_dict = {} 
     
     if args.dataset.startswith('nx'):
         raise NotImplementedError(f"currently not implemented.")
@@ -147,6 +146,7 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
     augmented_cluster_labels_list = []
     augment_fails = 0
 
+    # the aug_batch should cover all training samples !!!
     labeled_trainloader = DataLoader(labeled_data[label_split_idx["train"]], batch_size=args.aug_batch, shuffle=False, num_workers = 0)
 
     for step, batch_data in enumerate(labeled_trainloader):
@@ -170,6 +170,8 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
 ### need to check the topk_indices
             
             # topk_indices = torch.topk(criterion(y_pred_logits.view(y_true_all.size()).to(torch.float32), y_true_all).view(y_true_all.size()).sum(dim=-1), selected_topk, largest=False, sorted=True).indices
+            
+            # sample lower loss samples in each scaffold cluster
             errors = criterion(y_pred_logits.view(y_true_all.size()).to(torch.float32), y_true_all).view(y_true_all.size()).sum(dim=-1)
             cluster_labels = batch_data.cluster_id
             topk_indices, topk_cluster_labels = topk_cluster_indices(errors, selected_topk, cluster_labels)
@@ -191,12 +193,13 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
             for kept_index in kept_indices:
                 kept_pyg_list.append(batch_data_list[kept_index])
 
+            # check for new gdss trained on pcba
             batch_dense_x, batch_dense_x_disable, batch_dense_enable_adj, batch_dense_disable_adj, batch_node_mask = \
-                convert_sparse_to_dense(batch_index, batch_data.x, batch_data.edge_index, batch_data.edge_attr, augment_mask=None)
+                convert_sparse_to_dense(batch_index, batch_data.x, batch_data.edge_index, batch_data.edge_attr, augment_mask=None) 
 
             ## this part is confusing
             if batch_dense_x_disable is None:
-                ori_x, ori_adj = batch_dense_x.clone(), batch_dense_enable_adj.clone()
+                ori_x, ori_adj = batch_dense_x.clone(), batch_dense_enable_adj.clone()  
             else:
                 ori_x, ori_adj = combine_graph_inputs(*convert_sparse_to_dense(batch_index, batch_data.x, batch_data.edge_index, batch_data.edge_attr, augment_mask=None, return_node_mask=False))
             ori_x, ori_adj = ori_x.to(torch.float32), ori_adj.to(torch.float32)
@@ -311,8 +314,10 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
             else:
                 augmented_x, augmented_adj = combine_graph_inputs(augmented_x, batch_dense_x_disable, augmented_adj, batch_dense_disable_adj, mode='discrete')
             
-            # may update convert_dense_to_rawpyg
+            print(augmented_x, augmented_adj, augment_labels)
+            # get bug here 
             batch_augment_pyg_list = convert_dense_to_rawpyg(augmented_x, augmented_adj, augment_labels, n_jobs=args.n_jobs)
+            print(batch_augment_pyg_list)
 
             augment_indices = augment_mask.nonzero().view(-1).cpu().tolist()
             augmented_pyg_list_temp = []
@@ -339,8 +344,8 @@ def build_augmentation_dataset(args, model, generator, labeled_data, split):
             # get all the augmented data 
             # augmented_cluster_labels_list.extend(augmented_cluter_label_temp)
             augmented_pyg_list.extend(augmented_pyg_list_temp)
-
-
+            print('augmented_pyg_list', len(augmented_pyg_list))
+            print('augment_fail', augment_fails)
             
     kept_pyg_list.extend(augmented_pyg_list)
     # need to modify this process

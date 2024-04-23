@@ -154,9 +154,8 @@ def convert_sparse_to_dense(batch_index, node_feature, edge_index, edge_attr, au
         dense_enable_adj = dense_enable_adj[augment_mask]
         dense_disable_adj = dense_disable_adj[augment_mask]
     # process node feature B, N, F
-    # need to update the node features 
-    atomic_num = node_feature[:,0].view(-1) + 1
-    # keep
+    atomic_num = node_feature[:,0].view(-1) + 1 # get the atomic number
+
     dense_atomic_num, node_mask = to_dense_batch(atomic_num, batch=batch_index, max_num_nodes=max_count) # B, N=max_cout, F=None
     if augment_mask is not None:
         dense_atomic_num = dense_atomic_num[augment_mask]
@@ -164,9 +163,10 @@ def convert_sparse_to_dense(batch_index, node_feature, edge_index, edge_attr, au
     dense_one_hot = torch.nn.functional.one_hot(dense_atomic_num, num_classes=120).to(torch.float32)[:,:,1:] # (B N F), F = [0, 1~118, misc]
     # enable all index
     # enbale_index = torch.LongTensor([5,6,7,8])
-    # enable_mask = torch.zeros(119).scatter_(0, enbale_index, 1).bool()
-    dense_x = dense_one_hot #[:,:,enable_mask]
-    dense_x_disable = dense_one_hot#[:,:,~enable_mask]
+    enbale_index = torch.LongTensor(list(range(1, 119)))
+    enable_mask = torch.zeros(119).scatter_(0, enbale_index, 1).bool()
+    dense_x = dense_one_hot[:,:,enable_mask]
+    dense_x_disable = dense_one_hot[:,:,~enable_mask]
     if return_node_mask:
         return dense_x, dense_x_disable, dense_enable_adj, dense_disable_adj, node_mask
     else:
@@ -192,12 +192,11 @@ def quantize_mol(adjs):
     adjs[adjs < 0.5] = 0
     return adjs
 
-# may need to change this 
 def combine_graph_inputs(x, x_disable, adj, adj_disable, mode='continuous'):
     assert mode in ['continuous', 'discrete']
     x_disable = x_disable.to(x.device)
     adj_disable = adj_disable.to(adj.device)
-    permutate_x_one_hot = torch.cat([torch.LongTensor([4,5,6,7,8,0,1,2,3]), torch.arange(9,119)]).to(x.device)
+    permutate_x_one_hot = torch.cat([torch.LongTensor([4,5,6,7,8,0,1,2,3]), torch.arange(9,119)]).to(x.device) # 
     x = torch.cat([x, x_disable*1.5],dim=-1)
     x = x[:, :, permutate_x_one_hot]
     if mode == 'discrete':
@@ -226,11 +225,18 @@ def convert_dense_to_rawpyg(dense_x, dense_adj, augmented_labels, n_jobs=20):
         results = pool.map(get_pyg_data_from_dense_batch, [(batch_split_x[i], batch_split_adj[i], batch_split_labels[i], batch_split_traces[i]) for i in range(len(batch_split_adj))])
     for single_results in results:
         pyg_graph_list.extend(single_results)
+    
+    print('rawpyg:', pyg_graph_list)    
+    
     return pyg_graph_list
 
 
 def get_pyg_data_from_dense_batch(params):
     batched_x, batched_adj, augmented_labels, batch_traces = params
+    # most x, adj are null
+    print('batched_x:', batched_x)
+    print('batched_adj:', batched_adj)
+    print('augmented_labels:', augmented_labels)
     pyg_graph_list = []
 
     for b_index, (x_single, adj_single) in enumerate(zip(batched_x, batched_adj)):
@@ -260,6 +266,7 @@ def get_pyg_data_from_dense_batch(params):
     return pyg_graph_list
 
 def construct_single_mol(x, adj): # x: 9, 5; adj: 9, 9
+    # print(x.shape, adj.shape)
     mol = Chem.RWMol()
     atomic_int = np.argmax(x, axis=1) + 1
     atoms_exist = atomic_int > 1 # No Hydrogen
@@ -269,6 +276,8 @@ def construct_single_mol(x, adj): # x: 9, 5; adj: 9, 9
             mol.AddAtom(Chem.Atom('*'))
         else:
             mol.AddAtom(Chem.Atom(int(atomic_num)))
+    
+    # print(mol)
     adj = adj[atoms_exist, :][:, atoms_exist]
     for start, end in zip(*np.nonzero(adj)):
         if start > end:
@@ -276,6 +285,7 @@ def construct_single_mol(x, adj): # x: 9, 5; adj: 9, 9
             # add formal charge to atom: e.g. [O+], [N+], [S+]
             # not support [O-], [N-], [S-], [NH+] etc.
             flag, atomid_valence = check_valency(mol)
+            # print(len(atomid_valence))
             if flag:
                 continue
             else:

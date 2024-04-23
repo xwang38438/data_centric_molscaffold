@@ -23,18 +23,18 @@ batch_size: 2048
 patience: 300
 
 # diffusion-based augmentation
-# n_negative: 5
-# out_steps: 5
-# topk: 120
+n_negative: 5
+out_steps: 10
+topk: 5
 aug_batch: 2048
-start: 60 # no augmentation
+start: 10 
 end: 300
 iteration: 10
-# strategy: add_accumulate
+strategy: add_once
 
 # original:replace_accumulate
-snr: 1
-scale_eps: 0.
+snr: 0.2
+scale_eps: 0.9
 perturb_ratio: 0.02
 
 no_print: True

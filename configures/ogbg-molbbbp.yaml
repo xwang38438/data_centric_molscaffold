@@ -18,9 +18,9 @@ wdecay: 0
 batch_size: 2048
 
 # diffusion-based augmentation
-# n_negative: 5
-# out_steps: 5
-# topk: 30
+n_negative: 5
+out_steps: 5
+topk: 10
 aug_batch: 2000
 start: 60
 iteration: 10
